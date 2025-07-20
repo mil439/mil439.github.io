@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自分だけの単語帳</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Mochiy+Pop+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        h1, h2, button, .view-btn {
+            font-family: 'Mochiy+Pop+One', sans-serif;
+        }
+        /* テキストを隠すためのスタイル */
+        .spoiler {
+            background-color: #374151;
+            color: transparent;
+            border-radius: 4px;
+            padding: 0 4px;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.3s;
+        }
+        .spoiler.revealed {
+            background-color: transparent;
+            color: inherit;
+        }
+        /* 編集中のセルのスタイル */
+        td.editing { padding: 2px !important; }
+        .edit-input {
+             width: 100%;
+             padding: 0.5rem;
+             border: 2px solid #3b82f6;
+             border-radius: 6px;
+             background-color: #eff6ff;
+             outline: none;
+        }
+        .toggle-all-btn, .action-btn {
+            background: none; border: none; cursor: pointer; color: #6b7280; padding: 4px;
+        }
+        .toggle-all-btn:hover, .action-btn:hover { color: #3b82f6; }
+        .favorite-btn.favorited {
+            color: #facc15; /* 黄色 */
+        }
+
+        /* カード表示用のスタイル */
+        .card-view-container { perspective: 1000px; }
+        .flash-card {
+            width: 100%;
+            height: 250px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+            cursor: pointer;
+        }
+        .flash-card.is-flipped { transform: rotateY(180deg); }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            font-size: 1.25rem;
+        }
+        .card-front { background-color: white; color: #1f2937; }
+        .card-back { background-color: #3b82f6; color: white; transform: rotateY(180deg); }
+        
+        /* 表示切替ボタン */
+        .view-btn {
+            padding: 8px 16px;
+            border: 2px solid #d1d5db;
+            background-color: white;
+            color: #4b5563;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .view-btn.active {
+            background-color: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        .view-btn:first-child { border-radius: 0.5rem 0 0 0.5rem; }
+        .view-btn:last-child { border-radius: 0 0.5rem 0.5rem 0; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="text-center mb-12">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-600">単語帳</h1>
+            <p class="mt-2 text-gray-600">Geminiを使って単語帳を作ってみました。リストでは単語、説明・ヒントをクリックすると表示/非表示にできます。カードではクリックすると説明・ヒントを見ることができます。</p>
+        </header>
+
+        <!-- 単語登録フォーム -->
+        <section id="add-word-section" class="bg-white p-6 rounded-xl shadow-lg mb-10">
+            <h2 class="text-xl font-bold text-gray-700 mb-4">新しい単語を登録</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="word-input" class="block text-sm font-medium text-gray-700">単語</label>
+                    <input type="text" id="word-input" placeholder="例：単語" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="description-input" class="block text-sm font-medium text-gray-700">説明・ヒント</label>
+                    <textarea id="description-input" rows="3" placeholder="例：意味の人まとまりを表し文法としての働きをもつものの最小単位" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <div class="text-right">
+                    <button id="add-word-button" class="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        登録する
+                    </button>
+                </div>
+            </div>
+            <div id="message-area" class="mt-4 text-center text-red-500"></div>
+        </section>
+
+        <!-- 単語リストセクション -->
+        <section id="word-list-section">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex">
+                    <button id="show-list-btn" class="view-btn active">リスト表示</button>
+                    <button id="show-card-btn" class="view-btn">カード表示</button>
+                </div>
+                <div id="sort-container" class="flex items-center">
+                    <label for="sort-select" class="mr-2 text-sm font-medium text-gray-700">並び替え:</label>
+                    <select id="sort-select" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2">
+                        <option value="newest">新しい順</option>
+                        <option value="oldest">古い順</option>
+                        <option value="gojuuon">五十音順</option>
+                        <option value="favorites">お気に入り</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- リスト表示コンテナ -->
+            <div id="table-view-container">
+                <div class="w-full overflow-x-auto bg-white rounded-lg shadow">
+                    <table class="min-w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 w-2/5">
+                                    <div class="flex items-center justify-between">
+                                        <span>単語</span>
+                                        <button id="toggle-all-words" title="単語をすべて表示/非表示" class="toggle-all-btn"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                </th>
+                                <th scope="col" class="px-6 py-3 w-2/5">
+                                    <div class="flex items-center justify-between">
+                                        <span>説明・ヒント</span>
+                                        <button id="toggle-all-descriptions" title="説明をすべて表示/非表示" class="toggle-all-btn"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                </th>
+                                <th scope="col" class="px-6 py-3 w-1/5 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="word-list-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- カード表示コンテナ -->
+            <div id="card-view-container" class="hidden">
+                 <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div id="card-display-area" class="card-view-container mb-4">
+                        <div class="flash-card">
+                            <div id="card-front" class="card-face card-front"></div>
+                            <div id="card-back" class="card-face card-back"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="prev-card-btn" class="py-2 px-4 rounded-md text-white bg-gray-500 hover:bg-gray-600"><i class="fas fa-arrow-left"></i> 前へ</button>
+                        <div id="card-counter" class="text-gray-700 font-semibold"></div>
+                        <button id="next-card-btn" class="py-2 px-4 rounded-md text-white bg-gray-500 hover:bg-gray-600">次へ <i class="fas fa-arrow-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Global State ---
+            let wordsData = [];
+            let currentSortOrder = 'newest';
+            let currentView = 'table';
+            let currentCardIndex = 0;
+
+            // --- DOM Elements ---
+            const wordInput = document.getElementById('word-input');
+            const descriptionInput = document.getElementById('description-input');
+            const addButton = document.getElementById('add-word-button');
+            const messageArea = document.getElementById('message-area');
+            
+            const sortSelect = document.getElementById('sort-select');
+            const sortContainer = document.getElementById('sort-container');
+            const wordListBody = document.getElementById('word-list-body');
+            const toggleAllWordsBtn = document.getElementById('toggle-all-words');
+            const toggleAllDescriptionsBtn = document.getElementById('toggle-all-descriptions');
+            
+            const showListBtn = document.getElementById('show-list-btn');
+            const showCardBtn = document.getElementById('show-card-btn');
+            const tableViewContainer = document.getElementById('table-view-container');
+            const cardViewContainer = document.getElementById('card-view-container');
+
+            const flashCard = document.querySelector('.flash-card');
+            const cardFront = document.getElementById('card-front');
+            const cardBack = document.getElementById('card-back');
+            const prevCardBtn = document.getElementById('prev-card-btn');
+            const nextCardBtn = document.getElementById('next-card-btn');
+            const cardCounter = document.getElementById('card-counter');
+
+            // --- Data Persistence ---
+            function saveWords() { localStorage.setItem('vocabularyAppWords', JSON.stringify(wordsData)); }
+            function loadWords() {
+                const savedWords = localStorage.getItem('vocabularyAppWords');
+                if (savedWords) {
+                    wordsData = JSON.parse(savedWords).map(word => ({...word, isFavorite: word.isFavorite || false}));
+                }
+                renderViews();
+            }
+
+            // --- Main Rendering Logic ---
+            function renderViews() {
+                sortData();
+                renderTable();
+                renderCardView();
+            }
+
+            function sortData() {
+                if (currentSortOrder === 'newest') wordsData.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+                else if (currentSortOrder === 'oldest') wordsData.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                else if (currentSortOrder === 'gojuuon') wordsData.sort((a, b) => a.word.localeCompare(b.word, 'ja'));
+                else if (currentSortOrder === 'favorites') {
+                    wordsData.sort((a, b) => {
+                        if (a.isFavorite && !b.isFavorite) return -1;
+                        if (!a.isFavorite && b.isFavorite) return 1;
+                        return parseInt(b.id) - parseInt(a.id); // お気に入り内では新しい順
+                    });
+                }
+            }
+
+            // --- Table View ---
+            function renderTable() {
+                wordListBody.innerHTML = '';
+                if (wordsData.length === 0) {
+                    wordListBody.innerHTML = '<tr><td colspan="3" class="text-center p-6 text-gray-500">まだ単語が登録されていません。</td></tr>';
+                } else {
+                    wordsData.forEach(item => createWordRow(item));
+                }
+            }
+
+            function createWordRow(data) {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b hover:bg-gray-50';
+                const wordCell = document.createElement('td');
+                wordCell.className = 'px-6 py-4 align-top word-cell';
+                revertCell(wordCell, 'word', data.word);
+                wordCell.addEventListener('dblclick', () => makeEditable(wordCell, data.id, 'word', data.word));
+                const descCell = document.createElement('td');
+                descCell.className = 'px-6 py-4 align-top description-cell';
+                revertCell(descCell, 'description', data.description);
+                descCell.addEventListener('dblclick', () => makeEditable(descCell, data.id, 'description', data.description));
+                
+                const actionCell = document.createElement('td');
+                actionCell.className = 'px-6 py-4 text-center align-top';
+
+                const favoriteButton = document.createElement('button');
+                favoriteButton.className = `action-btn favorite-btn ${data.isFavorite ? 'favorited' : ''}`;
+                favoriteButton.innerHTML = '<i class="fas fa-star fa-lg"></i>';
+                favoriteButton.title = 'お気に入り登録/解除';
+                favoriteButton.addEventListener('click', () => toggleFavorite(data.id));
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'action-btn text-gray-400 hover:text-red-600 transition-colors ml-2';
+                deleteButton.innerHTML = '<i class="fas fa-trash-alt fa-lg"></i>';
+                deleteButton.title = 'この単語を削除';
+                deleteButton.addEventListener('click', () => deleteWord(data.id));
+                
+                actionCell.appendChild(favoriteButton);
+                actionCell.appendChild(deleteButton);
+
+                row.appendChild(wordCell);
+                row.appendChild(descCell);
+                row.appendChild(actionCell);
+                wordListBody.appendChild(row);
+            }
+
+            // --- Card View ---
+            function renderCardView() {
+                if (wordsData.length === 0) {
+                    cardViewContainer.classList.add('hidden');
+                    return;
+                }
+                if (currentCardIndex >= wordsData.length) currentCardIndex = wordsData.length - 1;
+                if (currentCardIndex < 0) currentCardIndex = 0;
+                showCard(currentCardIndex);
+            }
+
+            function showCard(index) {
+                if (wordsData.length === 0) {
+                    cardFront.textContent = '単語がありません';
+                    cardBack.textContent = '単語を登録してください';
+                    cardCounter.textContent = '0 / 0';
+                    prevCardBtn.disabled = true;
+                    nextCardBtn.disabled = true;
+                    return;
+                }
+                flashCard.classList.remove('is-flipped');
+                const cardData = wordsData[index];
+                cardFront.textContent = cardData.word;
+                cardBack.textContent = cardData.description;
+                cardCounter.textContent = `${index + 1} / ${wordsData.length}`;
+                prevCardBtn.disabled = index === 0;
+                nextCardBtn.disabled = index === wordsData.length - 1;
+            }
+
+            // --- CRUD ---
+            function addWord() {
+                const word = wordInput.value.trim();
+                const description = descriptionInput.value.trim();
+                if (!word || !description) {
+                    messageArea.textContent = '単語と説明の両方を入力してください。';
+                    return;
+                }
+                const newWord = { id: Date.now().toString(), word, description, isFavorite: false };
+                wordsData.push(newWord);
+                saveWords();
+                renderViews();
+                wordInput.value = '';
+                descriptionInput.value = '';
+                messageArea.textContent = '';
+            }
+
+            function deleteWord(id) {
+                wordsData = wordsData.filter(item => item.id !== id);
+                saveWords();
+                renderViews();
+            }
+
+            function updateWord(id, field, newValue) {
+                const wordIndex = wordsData.findIndex(item => item.id === id);
+                if (wordIndex > -1) wordsData[wordIndex][field] = newValue;
+                saveWords();
+            }
+
+            function toggleFavorite(id) {
+                const wordIndex = wordsData.findIndex(item => item.id === id);
+                if (wordIndex > -1) {
+                    wordsData[wordIndex].isFavorite = !wordsData[wordIndex].isFavorite;
+                    saveWords();
+                    renderViews();
+                }
+            }
+
+            // --- Editable Cell ---
+            function makeEditable(cell, docId, field, originalValue) {
+                if (cell.querySelector('.edit-input')) return;
+                const isDescription = field === 'description';
+                const inputElement = document.createElement(isDescription ? 'textarea' : 'input');
+                inputElement.value = originalValue;
+                inputElement.className = 'edit-input';
+                if (isDescription) inputElement.rows = 3;
+                cell.innerHTML = '';
+                cell.classList.add('editing');
+                cell.appendChild(inputElement);
+                inputElement.focus();
+                const saveChanges = () => {
+                    const newValue = inputElement.value.trim();
+                    if (newValue && newValue !== originalValue) updateWord(docId, field, newValue);
+                    renderViews();
+                };
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        inputElement.removeEventListener('blur', saveChanges);
+                        renderViews();
+                    } else if (e.key === 'Enter' && !isDescription) inputElement.blur();
+                };
+                inputElement.addEventListener('blur', saveChanges, { once: true });
+                inputElement.addEventListener('keydown', handleKeyDown);
+            }
+            
+            function revertCell(cell, field, value) {
+                cell.innerHTML = '';
+                cell.classList.remove('editing');
+                const spoilerSpan = document.createElement('span');
+                spoilerSpan.className = 'spoiler';
+                spoilerSpan.textContent = value;
+                if (field === 'word') spoilerSpan.classList.add('revealed');
+                spoilerSpan.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    spoilerSpan.classList.toggle('revealed');
+                });
+                cell.appendChild(spoilerSpan);
+            }
+
+            // --- Toggle All ---
+            function toggleColumnVisibility(cellSelector) {
+                const cells = wordListBody.querySelectorAll(cellSelector);
+                if (cells.length === 0) return;
+                const firstSpoiler = cells[0].querySelector('.spoiler');
+                if (!firstSpoiler) return;
+                const shouldReveal = !firstSpoiler.classList.contains('revealed');
+                cells.forEach(cell => {
+                    const spoiler = cell.querySelector('.spoiler');
+                    if (spoiler) {
+                        if (shouldReveal) spoiler.classList.add('revealed');
+                        else spoiler.classList.remove('revealed');
+                    }
+                });
+            }
+
+            // --- Event Listeners ---
+            addButton.addEventListener('click', addWord);
+            sortSelect.addEventListener('change', (e) => {
+                currentSortOrder = e.target.value;
+                renderViews();
+            });
+            toggleAllWordsBtn.addEventListener('click', () => toggleColumnVisibility('.word-cell'));
+            toggleAllDescriptionsBtn.addEventListener('click', () => toggleColumnVisibility('.description-cell'));
+            
+            showListBtn.addEventListener('click', () => {
+                currentView = 'table';
+                tableViewContainer.classList.remove('hidden');
+                cardViewContainer.classList.add('hidden');
+                showListBtn.classList.add('active');
+                showCardBtn.classList.remove('active');
+                sortContainer.style.visibility = 'visible';
+            });
+
+            showCardBtn.addEventListener('click', () => {
+                currentView = 'card';
+                tableViewContainer.classList.add('hidden');
+                cardViewContainer.classList.remove('hidden');
+                showListBtn.classList.remove('active');
+                showCardBtn.classList.add('active');
+                sortContainer.style.visibility = 'hidden';
+                renderCardView();
+            });
+
+            flashCard.addEventListener('click', () => flashCard.classList.toggle('is-flipped'));
+            prevCardBtn.addEventListener('click', () => {
+                if (currentCardIndex > 0) {
+                    currentCardIndex--;
+                    showCard(currentCardIndex);
+                }
+            });
+            nextCardBtn.addEventListener('click', () => {
+                if (currentCardIndex < wordsData.length - 1) {
+                    currentCardIndex++;
+                    showCard(currentCardIndex);
+                }
+            });
+
+            // --- Initial Load ---
+            loadWords();
+        });
+    </script>
+</body>
+</html>
